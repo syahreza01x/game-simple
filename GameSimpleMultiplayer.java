@@ -19,19 +19,21 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
 
     int score1 = 0, score2 = 0;
     int highScore1 = 0, highScore2 = 0;
+    int lives1 = 3, lives2 = 3;
     boolean player1Dead = false;
     boolean player2Dead = false;
     boolean isSinglePlayer = true;
 
-    // Skill state
     boolean timeStopActive = false;
     boolean areaClearActive = false;
     long timeStopStart = 0;
     long areaClearStart = 0;
     long timeStopCooldownStart = -15000;
-    long areaClearCooldownStart = -5000;
+    long areaClearCooldownStart = -20000;
 
-    // Skill key mapping
+    boolean showTimeStopEffect = false;
+    boolean showAreaClearEffect = false;
+
     int timeStopKey;
     int areaClearKey;
 
@@ -72,51 +74,67 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
         long now = System.currentTimeMillis();
         boolean timeStopWindow = timeStopActive && (now - timeStopStart < 5000);
 
-        // Score logic
         if (!player1Dead) score1++;
         if (!player2Dead && !isSinglePlayer && !timeStopWindow) score2++;
 
+        showTimeStopEffect = timeStopActive && (now - timeStopStart <= 5000);
+        showAreaClearEffect = areaClearActive && (now - areaClearStart <= 5000);
+
         if (timeStopWindow) {
-            // Player 2 frozen, no bullets update
+            // Player 2 frozen
         } else {
-            timeStopActive = false;
+            if (timeStopActive) {
+                timeStopActive = false;
+                timeStopCooldownStart = System.currentTimeMillis();
+            }
             updateBullets();
             spawnBullets();
         }
 
-        // Check deaths
         if (!player1Dead && arena[heartX1][heartY1] == '*') {
-            player1Dead = true;
-            if (score1 > highScore1) highScore1 = score1;
-            repaint();
-            JOptionPane.showMessageDialog(this, "💀 Player 1 Kena peluru! Game Over.\nScore: " + score1 + "\nHigh Score: " + highScore1);
+            lives1--;
+            if (lives1 <= 0) {
+                player1Dead = true;
+                if (score1 > highScore1) highScore1 = score1;
+                JOptionPane.showMessageDialog(this, "\uD83D\uDC80 Player 1 Kehabisan nyawa! Game Over.\nScore: " + score1 + "\nHigh Score: " + highScore1);
+            }
         }
 
         if (!player2Dead && !isSinglePlayer && arena[heartX2][heartY2] == '*') {
-            player2Dead = true;
-            if (score2 > highScore2) highScore2 = score2;
-            repaint();
-            JOptionPane.showMessageDialog(this, "💀 Player 2 Kena peluru! Game Over.\nScore: " + score2 + "\nHigh Score: " + highScore2);
+            lives2--;
+            if (lives2 <= 0) {
+                player2Dead = true;
+                if (score2 > highScore2) highScore2 = score2;
+                JOptionPane.showMessageDialog(this, "\uD83D\uDC80 Player 2 Kehabisan nyawa! Game Over.\nScore: " + score2 + "\nHigh Score: " + highScore2);
+            }
         }
 
-        // Game over
         if ((player1Dead && (player2Dead || isSinglePlayer))) {
-            JOptionPane.showMessageDialog(this, "🎮 Game Over. Player mati.");
+            JOptionPane.showMessageDialog(this, "\uD83C\uDFAE Game Over. Player mati.");
             resetGame();
         }
 
-        // Update arena
         if (!player1Dead) arena[heartX1][heartY1] = '♥'; else arena[heartX1][heartY1] = ' ';
         if (!player2Dead && !isSinglePlayer) arena[heartX2][heartY2] = '♦'; else arena[heartX2][heartY2] = ' ';
 
-        // Skill area clear
         if (areaClearActive && (now - areaClearStart <= 5000)) {
             clearBulletsAroundPlayer2();
         } else {
-            areaClearActive = false;
+            if (areaClearActive) {
+                areaClearActive = false;
+                areaClearCooldownStart = System.currentTimeMillis();
+            }
         }
 
         repaint();
+    }
+
+    boolean isTimeStopReady() {
+        return !timeStopActive && (System.currentTimeMillis() - timeStopCooldownStart >= 15000);
+    }
+
+    boolean isAreaClearReady() {
+        return !areaClearActive && (System.currentTimeMillis() - areaClearCooldownStart >= 20000);
     }
 
     void resetGame() {
@@ -124,9 +142,10 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
         heartX1 = ROWS - 2; heartY1 = COLS / 4;
         heartX2 = ROWS - 2; heartY2 = COLS - COLS / 4;
         score1 = 0; score2 = 0;
+        lives1 = 3; lives2 = 3;
         player1Dead = false; player2Dead = false;
         timeStopActive = false; areaClearActive = false;
-        timeStopCooldownStart = -15000; areaClearCooldownStart = -5000;
+        timeStopCooldownStart = -15000; areaClearCooldownStart = -20000;
     }
 
     void updateBullets() {
@@ -179,16 +198,43 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             }
         }
 
+        if (showTimeStopEffect) {
+            g.setColor(new Color(0, 255, 255, 80));
+            g.fillRect(0, 0, getWidth(), getHeight());
+        }
+
+        if (showAreaClearEffect && !isSinglePlayer) {
+            int px = heartY2 * getWidth() / COLS;
+            int py = heartX2 * getHeight() / ROWS;
+            g.setColor(new Color(255, 255, 0, 80));
+            g.fillOval(px - 30, py - 30, 60, 60);
+        }
+
         g.setColor(Color.GREEN);
         g.setFont(new Font("Arial", Font.BOLD, 18));
         g.drawString("Player 1 Score: " + score1, 20, 30);
         g.drawString("High Score P1: " + highScore1, 20, 60);
-        g.drawString("Skill: " + (System.currentTimeMillis() - timeStopCooldownStart >= 15000 ? "Ready" : "Cooldown"), 20, 90);
+        g.drawString("Skill: " + (isTimeStopReady() ? "Ready" : "Cooldown"), 20, 90);
+
+        g.setColor(Color.WHITE);
+        g.drawString("Lives P1 : ", 250, 30);
+        for (int i = 0; i < lives1; i++) {
+            g.setColor(Color.PINK);
+            g.drawString("♥", 350 + (i * 20), 30);
+        }
 
         if (!isSinglePlayer) {
+            g.setColor(Color.GREEN);
             g.drawString("Player 2 Score: " + score2, 20, 120);
             g.drawString("High Score P2: " + highScore2, 20, 150);
-            g.drawString("Skill: " + (System.currentTimeMillis() - areaClearCooldownStart >= 5000 ? "Ready" : "Cooldown"), 20, 180);
+            g.drawString("Skill: " + (isAreaClearReady() ? "Ready" : "Cooldown"), 20, 180);
+
+            g.setColor(Color.WHITE);
+            g.drawString("Lives P2 : ", 250, 60);
+            for (int i = 0; i < lives2; i++) {
+                g.setColor(Color.CYAN);
+                g.drawString("♦", 350 + (i * 20), 60);
+            }
         }
     }
 
@@ -206,10 +252,9 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 case KeyEvent.VK_A -> { if (heartY1 > 0) heartY1--; }
                 case KeyEvent.VK_D -> { if (heartY1 < COLS - 1) heartY1++; }
             }
-            if (key == timeStopKey && System.currentTimeMillis() - timeStopCooldownStart >= 15000) {
+            if (key == timeStopKey && isTimeStopReady()) {
                 timeStopActive = true;
                 timeStopStart = System.currentTimeMillis();
-                timeStopCooldownStart = timeStopStart;
                 playSound("sounds/player1.wav");
             }
         }
@@ -221,10 +266,9 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 case KeyEvent.VK_LEFT -> { if (heartY2 > 0) heartY2--; }
                 case KeyEvent.VK_RIGHT -> { if (heartY2 < COLS - 1) heartY2++; }
             }
-            if (key == areaClearKey && System.currentTimeMillis() - areaClearCooldownStart >= 5000) {
+            if (key == areaClearKey && isAreaClearReady()) {
                 areaClearActive = true;
                 areaClearStart = System.currentTimeMillis();
-                areaClearCooldownStart = areaClearStart;
                 playSound("sounds/player2.wav");
             }
         }
@@ -257,7 +301,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             if (input2 != null && input2.length() == 1) {
                 defaultAreaClearKey = KeyEvent.getExtendedKeyCodeForChar(input2.toUpperCase().charAt(0));
             }
-            main(null); // restart
+            main(null);
             return;
         }
 
