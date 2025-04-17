@@ -1,4 +1,3 @@
-// Full updated code with mode selection, difficulty, and character skills with cooldowns
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -18,91 +17,90 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     int highScore1 = 0, highScore2 = 0;
     boolean player1Dead = false;
     boolean player2Dead = false;
+    boolean isSinglePlayer = true;
 
-    boolean isSinglePlayer = false;
-    int difficulty = 10; // default spawn chance base
-
-    boolean skill1Ready = true;
-    boolean skill2Ready = true;
-    long skill1LastUsed = 0;
-    long skill2LastUsed = 0;
-    boolean timeStopped = false;
+    // Skill state
+    boolean timeStopActive = false;
+    boolean areaClearActive = false;
     long timeStopStart = 0;
+    long areaClearStart = 0;
+    long timeStopCooldownStart = -15000;
+    long areaClearCooldownStart = -5000;
 
-    public GameSimpleMultiplayer() {
-        setFocusable(true);
-        addKeyListener(this);
-        showMenu();
-        timer = new Timer(1000 / 10, this);
-        timer.start();
+    // Skill key mapping
+    int timeStopKey;
+    int areaClearKey;
+
+    // Default keys (static so bisa di-set sebelum buat objek)
+    static int defaultTimeStopKey = KeyEvent.VK_E;
+    static int defaultAreaClearKey = KeyEvent.VK_END;
+
+    // Constructors
+    public GameSimpleMultiplayer(boolean singlePlayer) {
+        this(singlePlayer, defaultTimeStopKey, defaultAreaClearKey);
     }
 
-    void showMenu() {
-        String[] modes = {"Single Player", "Multiplayer"};
-        int mode = JOptionPane.showOptionDialog(null, "Pilih Mode:", "Mode",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, modes, modes[0]);
-        isSinglePlayer = mode == 0;
-
-        String[] levels = {"Easy", "Medium", "Hard", "Insane"};
-        int diff = JOptionPane.showOptionDialog(null, "Pilih Difficulty:", "Difficulty",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, levels, levels[0]);
-        switch (diff) {
-            case 0: difficulty = 5; break;
-            case 1: difficulty = 10; break;
-            case 2: difficulty = 15; break;
-            case 3: difficulty = 25; break;
-        }
+    public GameSimpleMultiplayer(boolean singlePlayer, int p1Key, int p2Key) {
+        this.isSinglePlayer = singlePlayer;
+        this.timeStopKey = p1Key;
+        this.areaClearKey = p2Key;
+        setFocusable(true);
+        addKeyListener(this);
+        timer = new Timer(1000 / 10, this);
+        timer.start();
     }
 
     public void actionPerformed(ActionEvent e) {
         long now = System.currentTimeMillis();
 
-        // Manage time stop duration
-        if (timeStopped && now - timeStopStart > 5000) {
-            timeStopped = false;
-        }
-
-        if (!player1Dead || !player2Dead) {
-            if (!timeStopped) updateBullets();
+        if (!timeStopActive || (now - timeStopStart >= 5000)) {
+            timeStopActive = false;
+            updateBullets();
             spawnBullets();
         }
 
         if (!player1Dead) score1++;
-        if (!player2Dead) score2++;
+        if (!player2Dead && !isSinglePlayer) score2++;
 
         if (!player1Dead && arena[heartX1][heartY1] == '*') {
             player1Dead = true;
             if (score1 > highScore1) highScore1 = score1;
             repaint();
-            JOptionPane.showMessageDialog(this, "\uD83D\uDC80 Player 1 Kena peluru!\nScore: " + score1);
+            JOptionPane.showMessageDialog(this, "💀 Player 1 Kena peluru! Game Over.\nScore: " + score1 + "\nHigh Score: " + highScore1);
         }
-        if (!player2Dead && arena[heartX2][heartY2] == '*') {
+
+        if (!player2Dead && !isSinglePlayer && arena[heartX2][heartY2] == '*') {
             player2Dead = true;
             if (score2 > highScore2) highScore2 = score2;
             repaint();
-            JOptionPane.showMessageDialog(this, "\uD83D\uDC80 Player 2 Kena peluru!\nScore: " + score2);
+            JOptionPane.showMessageDialog(this, "💀 Player 2 Kena peluru! Game Over.\nScore: " + score2 + "\nHigh Score: " + highScore2);
         }
 
-        if ((isSinglePlayer && player1Dead) || (!isSinglePlayer && player1Dead && player2Dead)) {
-            JOptionPane.showMessageDialog(this, "\uD83C\uDFAE Game Over!");
+        if ((player1Dead && (player2Dead || isSinglePlayer))) {
+            JOptionPane.showMessageDialog(this, "🎮 Game Over. Keduanya mati.");
             resetGame();
         }
 
-        if (!player1Dead) arena[heartX1][heartY1] = '♥';
-        if (!player2Dead) arena[heartX2][heartY2] = '♦';
+        if (!player1Dead) arena[heartX1][heartY1] = '♥'; else arena[heartX1][heartY1] = ' ';
+        if (!player2Dead && !isSinglePlayer) arena[heartX2][heartY2] = '♦'; else arena[heartX2][heartY2] = ' ';
+
+        if (areaClearActive && (now - areaClearStart <= 5000)) {
+            clearBulletsAroundPlayer2();
+        } else {
+            areaClearActive = false;
+        }
 
         repaint();
     }
 
     void resetGame() {
         for (int i = 0; i < ROWS; i++) Arrays.fill(arena[i], ' ');
-        heartX1 = ROWS - 2;
-        heartY1 = COLS / 4;
-        heartX2 = ROWS - 2;
-        heartY2 = COLS - COLS / 4;
-        score1 = score2 = 0;
-        player1Dead = player2Dead = false;
-        skill1Ready = skill2Ready = true;
+        heartX1 = ROWS - 2; heartY1 = COLS / 4;
+        heartX2 = ROWS - 2; heartY2 = COLS - COLS / 4;
+        score1 = 0; score2 = 0;
+        player1Dead = false; player2Dead = false;
+        timeStopActive = false; areaClearActive = false;
+        timeStopCooldownStart = -15000; areaClearCooldownStart = -5000;
         timer.start();
     }
 
@@ -123,8 +121,17 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
 
     void spawnBullets() {
         for (int i = 0; i < COLS; i++) {
-            if (rand.nextInt(300) < difficulty) {
-                arena[0][i] = '*';
+            if (rand.nextInt(300) < 10) arena[0][i] = '*';
+        }
+    }
+
+    void clearBulletsAroundPlayer2() {
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                int x = heartX2 + i, y = heartY2 + j;
+                if (x >= 0 && x < ROWS && y >= 0 && y < COLS && arena[x][y] == '*') {
+                    arena[x][y] = ' ';
+                }
             }
         }
     }
@@ -132,41 +139,40 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
         setBackground(Color.black);
-        int cellWidth = getWidth() / COLS;
-        int cellHeight = getHeight() / ROWS;
-        int fontSize = Math.min(cellWidth, cellHeight) - 2;
+
+        int cw = getWidth() / COLS;
+        int ch = getHeight() / ROWS;
+        int fontSize = Math.min(cw, ch) - 2;
+
         g.setFont(new Font("Monospaced", Font.BOLD, fontSize));
 
         for (int i = 0; i < ROWS; i++) {
             for (int j = 0; j < COLS; j++) {
                 char c = arena[i][j];
-                if (c == '♥') g.setColor(Color.RED);
-                else if (c == '♦') g.setColor(Color.BLUE);
-                else if (c == '*') g.setColor(Color.YELLOW);
-                else if (c == 'X') g.setColor(Color.ORANGE);
-                else g.setColor(Color.WHITE);
-
-                g.drawString(String.valueOf(c == '\0' ? ' ' : c), j * cellWidth + cellWidth / 4,
-                        i * cellHeight + (3 * cellHeight / 4));
+                g.setColor(c == '♥' ? Color.RED : c == '♦' ? Color.BLUE : c == '*' ? Color.YELLOW : c == 'X' ? Color.ORANGE : Color.WHITE);
+                g.drawString(String.valueOf(c == '\0' ? ' ' : c), j * cw + cw / 4, i * ch + (3 * ch / 4));
             }
         }
 
         g.setColor(Color.GREEN);
-        g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString("P1 Score: " + score1 + " | High: " + highScore1, 20, 30);
-        g.drawString("Skill: " + (skill1Ready ? "Ready" : "Cooldown"), 20, 60);
+        g.setFont(new Font("Arial", Font.BOLD, 18));
+        g.drawString("Player 1 Score: " + score1, 20, 30);
+        g.drawString("High Score P1: " + highScore1, 20, 60);
+        g.drawString("Skill: " + (System.currentTimeMillis() - timeStopCooldownStart >= 15000 ? "Ready" : "Cooldown"), 20, 90);
+
         if (!isSinglePlayer) {
-            g.drawString("P2 Score: " + score2 + " | High: " + highScore2, 20, 90);
-            g.drawString("Skill: " + (skill2Ready ? "Ready" : "Cooldown"), 20, 120);
+            g.drawString("Player 2 Score: " + score2, 20, 120);
+            g.drawString("High Score P2: " + highScore2, 20, 150);
+            g.drawString("Skill: " + (System.currentTimeMillis() - areaClearCooldownStart >= 5000 ? "Ready" : "Cooldown"), 20, 180);
         }
     }
 
     public void keyPressed(KeyEvent e) {
         int key = e.getKeyCode();
-        long now = System.currentTimeMillis();
+        if (player1Dead && (player2Dead || isSinglePlayer)) return;
 
-        if (!player1Dead) arena[heartX1][heartY1] = ' ';
-        if (!player2Dead) arena[heartX2][heartY2] = ' ';
+        arena[heartX1][heartY1] = ' ';
+        arena[heartX2][heartY2] = ' ';
 
         if (!player1Dead) {
             switch (key) {
@@ -174,14 +180,11 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 case KeyEvent.VK_S: if (heartX1 < ROWS - 1) heartX1++; break;
                 case KeyEvent.VK_A: if (heartY1 > 0) heartY1--; break;
                 case KeyEvent.VK_D: if (heartY1 < COLS - 1) heartY1++; break;
-                case KeyEvent.VK_E:
-                    if (skill1Ready) {
-                        timeStopped = true;
-                        timeStopStart = now;
-                        skill1Ready = false;
-                        skill1LastUsed = now;
-                    }
-                    break;
+            }
+            if (key == timeStopKey && System.currentTimeMillis() - timeStopCooldownStart >= 15000) {
+                timeStopActive = true;
+                timeStopStart = System.currentTimeMillis();
+                timeStopCooldownStart = timeStopStart;
             }
         }
 
@@ -191,31 +194,37 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 case KeyEvent.VK_DOWN: if (heartX2 < ROWS - 1) heartX2++; break;
                 case KeyEvent.VK_LEFT: if (heartY2 > 0) heartY2--; break;
                 case KeyEvent.VK_RIGHT: if (heartY2 < COLS - 1) heartY2++; break;
-                case KeyEvent.VK_END:
-                    if (skill2Ready) {
-                        for (int i = Math.max(0, heartX2 - 2); i <= Math.min(ROWS - 1, heartX2 + 2); i++) {
-                            for (int j = Math.max(0, heartY2 - 2); j <= Math.min(COLS - 1, heartY2 + 2); j++) {
-                                if (arena[i][j] == '*') arena[i][j] = ' ';
-                            }
-                        }
-                        skill2Ready = false;
-                        skill2LastUsed = now;
-                    }
-                    break;
+            }
+            if (key == areaClearKey && System.currentTimeMillis() - areaClearCooldownStart >= 5000) {
+                areaClearActive = true;
+                areaClearStart = System.currentTimeMillis();
+                areaClearCooldownStart = areaClearStart;
             }
         }
-
-        // Cooldown check
-        if (!skill1Ready && now - skill1LastUsed >= 15000) skill1Ready = true;
-        if (!skill2Ready && now - skill2LastUsed >= 5000) skill2Ready = true;
     }
 
     public void keyReleased(KeyEvent e) {}
     public void keyTyped(KeyEvent e) {}
 
     public static void main(String[] args) {
-        JFrame frame = new JFrame("Undertale Mini Arena - Multiplayer");
-        GameSimpleMultiplayer game = new GameSimpleMultiplayer();
+        String[] options = {"Single Player", "Multiplayer", "Settings"};
+        int choice = JOptionPane.showOptionDialog(null, "Pilih Mode:", "Mode Game", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+
+        if (choice == 2) {
+            String input1 = JOptionPane.showInputDialog("Tombol skill Player 1 (E.g., E, Q, R):");
+            String input2 = JOptionPane.showInputDialog("Tombol skill Player 2 (E.g., END, L, O):");
+            if (input1 != null && input1.length() == 1) {
+                defaultTimeStopKey = KeyEvent.getExtendedKeyCodeForChar(input1.toUpperCase().charAt(0));
+            }
+            if (input2 != null && input2.length() == 1) {
+                defaultAreaClearKey = KeyEvent.getExtendedKeyCodeForChar(input2.toUpperCase().charAt(0));
+            }
+            main(null);
+            return;
+        }
+
+        JFrame frame = new JFrame("Undertale Mini Arena");
+        GameSimpleMultiplayer game = new GameSimpleMultiplayer(choice == 0, defaultTimeStopKey, defaultAreaClearKey);
         frame.add(game);
         frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
