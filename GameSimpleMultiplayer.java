@@ -52,46 +52,61 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
 
     public void actionPerformed(ActionEvent e) {
         long now = System.currentTimeMillis();
-
-        if (!timeStopActive || (now - timeStopStart >= 5000)) {
-            timeStopActive = false;
+    
+        // Jika timeStop aktif, hanya Player 2 yang tidak bisa bergerak dan skornya berhenti
+        if (timeStopActive && (now - timeStopStart < 5000)) {
+            if (!player1Dead) score1++; // Player 1 tetap mendapatkan skor
+        } else {
+            timeStopActive = false; // Jika waktu skill sudah habis, lanjutkan aksi
             updateBullets();
             spawnBullets();
         }
-
-        if (!player1Dead) score1++;
-        if (!player2Dead && !isSinglePlayer) score2++;
-
+    
+        // Skor hanya diperbarui untuk Player 2 jika mereka tidak mati dan timeStop tidak aktif
+        if (!player2Dead && !isSinglePlayer && !timeStopActive) score2++;
+    
+        // Pemeriksaan kematian Player 1 dan Player 2
         if (!player1Dead && arena[heartX1][heartY1] == '*') {
             player1Dead = true;
             if (score1 > highScore1) highScore1 = score1;
             repaint();
             JOptionPane.showMessageDialog(this, "💀 Player 1 Kena peluru! Game Over.\nScore: " + score1 + "\nHigh Score: " + highScore1);
         }
-
+    
         if (!player2Dead && !isSinglePlayer && arena[heartX2][heartY2] == '*') {
             player2Dead = true;
             if (score2 > highScore2) highScore2 = score2;
             repaint();
             JOptionPane.showMessageDialog(this, "💀 Player 2 Kena peluru! Game Over.\nScore: " + score2 + "\nHigh Score: " + highScore2);
         }
-
-        if ((player1Dead && (player2Dead || isSinglePlayer))) {
-            JOptionPane.showMessageDialog(this, "🎮 Game Over. Keduanya mati.");
+    
+        // Game Over jika kedua player mati
+        if ((player1Dead && (player2Dead && isSinglePlayer))) {
+            JOptionPane.showMessageDialog(this, "🎮 Game Over. Player mati.");
             resetGame();
         }
-
+    
+        if ((player1Dead && (player2Dead || isSinglePlayer))) {
+            JOptionPane.showMessageDialog(this, "🎮 Game Over. Player mati.");
+            resetGame();
+        }
+    
+        // Perbarui posisi pemain
         if (!player1Dead) arena[heartX1][heartY1] = '♥'; else arena[heartX1][heartY1] = ' ';
         if (!player2Dead && !isSinglePlayer) arena[heartX2][heartY2] = '♦'; else arena[heartX2][heartY2] = ' ';
-
+    
+        // Cek areaClear jika aktif
         if (areaClearActive && (now - areaClearStart <= 5000)) {
             clearBulletsAroundPlayer2();
         } else {
             areaClearActive = false;
         }
-
+    
         repaint();
     }
+    
+    
+    
 
     void resetGame() {
         for (int i = 0; i < ROWS; i++) Arrays.fill(arena[i], ' ');
@@ -170,10 +185,10 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     public void keyPressed(KeyEvent e) {
         int key = e.getKeyCode();
         if (player1Dead && (player2Dead || isSinglePlayer)) return;
-
+    
         arena[heartX1][heartY1] = ' ';
         arena[heartX2][heartY2] = ' ';
-
+    
         if (!player1Dead) {
             switch (key) {
                 case KeyEvent.VK_W: if (heartX1 > 0) heartX1--; break;
@@ -187,8 +202,8 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 timeStopCooldownStart = timeStopStart;
             }
         }
-
-        if (!player2Dead && !isSinglePlayer) {
+    
+        if (!player2Dead && !isSinglePlayer && !timeStopActive) { // Pastikan Player 2 tidak bergerak saat timeStop aktif
             switch (key) {
                 case KeyEvent.VK_UP: if (heartX2 > 0) heartX2--; break;
                 case KeyEvent.VK_DOWN: if (heartX2 < ROWS - 1) heartX2++; break;
@@ -202,14 +217,28 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             }
         }
     }
+    
+    
+    
 
     public void keyReleased(KeyEvent e) {}
     public void keyTyped(KeyEvent e) {}
 
     public static void main(String[] args) {
+        String[] difficulties = {"Easy", "Normal", "Hard"};
+        int difficultyChoice = JOptionPane.showOptionDialog(null, "Pilih Difficulty:", "Difficulty",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, difficulties, difficulties[0]);
+    
+        int delay = switch (difficultyChoice) {
+            case 0 -> 1000 / 5;   // Easy = lambat
+            case 2 -> 1000 / 15;  // Hard = cepat
+            default -> 1000 / 10; // Normal
+        };
+    
         String[] options = {"Single Player", "Multiplayer", "Settings"};
-        int choice = JOptionPane.showOptionDialog(null, "Pilih Mode:", "Mode Game", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
-
+        int choice = JOptionPane.showOptionDialog(null, "Pilih Mode:", "Mode Game",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+    
         if (choice == 2) {
             String input1 = JOptionPane.showInputDialog("Tombol skill Player 1 (E.g., E, Q, R):");
             String input2 = JOptionPane.showInputDialog("Tombol skill Player 2 (E.g., END, L, O):");
@@ -219,15 +248,17 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             if (input2 != null && input2.length() == 1) {
                 defaultAreaClearKey = KeyEvent.getExtendedKeyCodeForChar(input2.toUpperCase().charAt(0));
             }
-            main(null);
+            main(null); // restart
             return;
         }
-
+    
         JFrame frame = new JFrame("Undertale Mini Arena");
         GameSimpleMultiplayer game = new GameSimpleMultiplayer(choice == 0, defaultTimeStopKey, defaultAreaClearKey);
+        game.timer.setDelay(delay); // apply difficulty
         frame.add(game);
         frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
     }
 }
+
