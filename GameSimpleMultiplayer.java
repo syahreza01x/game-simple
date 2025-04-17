@@ -271,7 +271,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             return;
         }
     
-        JFrame frame = new JFrame("Undertale Mini Arena");
+        JFrame frame = new JFrame("ReZy Retro Game");
         GameSimpleMultiplayer game = new GameSimpleMultiplayer(choice == 0, defaultTimeStopKey, defaultAreaClearKey);
         game.timer.setDelay(delay); // apply difficulty
         frame.add(game);
