@@ -1,4 +1,4 @@
-
+// Full updated code with mode selection, difficulty, and character skills with cooldowns
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -8,8 +8,8 @@ import javax.swing.Timer;
 public class GameSimpleMultiplayer extends JPanel implements ActionListener, KeyListener {
     final int ROWS = 20, COLS = 60;
     char[][] arena = new char[ROWS][COLS];
-    int heartX1 = ROWS - 2, heartY1 = COLS / 4;  // Player 1 (WASD) Heart Position
-    int heartX2 = ROWS - 2, heartY2 = COLS - COLS / 4; // Player 2 (Arrow keys) Heart Position
+    int heartX1 = ROWS - 2, heartY1 = COLS / 4;
+    int heartX2 = ROWS - 2, heartY2 = COLS - COLS / 4;
 
     Timer timer;
     Random rand = new Random();
@@ -19,68 +19,90 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     boolean player1Dead = false;
     boolean player2Dead = false;
 
+    boolean isSinglePlayer = false;
+    int difficulty = 10; // default spawn chance base
+
+    boolean skill1Ready = true;
+    boolean skill2Ready = true;
+    long skill1LastUsed = 0;
+    long skill2LastUsed = 0;
+    boolean timeStopped = false;
+    long timeStopStart = 0;
+
     public GameSimpleMultiplayer() {
         setFocusable(true);
         addKeyListener(this);
-        timer = new Timer(1000 / 10, this); // 60 FPS
+        showMenu();
+        timer = new Timer(1000 / 10, this);
         timer.start();
     }
 
+    void showMenu() {
+        String[] modes = {"Single Player", "Multiplayer"};
+        int mode = JOptionPane.showOptionDialog(null, "Pilih Mode:", "Mode",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, modes, modes[0]);
+        isSinglePlayer = mode == 0;
+
+        String[] levels = {"Easy", "Medium", "Hard", "Insane"};
+        int diff = JOptionPane.showOptionDialog(null, "Pilih Difficulty:", "Difficulty",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, levels, levels[0]);
+        switch (diff) {
+            case 0: difficulty = 5; break;
+            case 1: difficulty = 10; break;
+            case 2: difficulty = 15; break;
+            case 3: difficulty = 25; break;
+        }
+    }
+
     public void actionPerformed(ActionEvent e) {
-        // Update bullets and spawn new bullets only if players are not dead
+        long now = System.currentTimeMillis();
+
+        // Manage time stop duration
+        if (timeStopped && now - timeStopStart > 5000) {
+            timeStopped = false;
+        }
+
         if (!player1Dead || !player2Dead) {
-            updateBullets();
+            if (!timeStopped) updateBullets();
             spawnBullets();
         }
 
-        // Increment score for both players, but only if they are not dead
         if (!player1Dead) score1++;
         if (!player2Dead) score2++;
 
-        // Check collision for player 1
         if (!player1Dead && arena[heartX1][heartY1] == '*') {
             player1Dead = true;
-            if (score1 > highScore1) {
-                highScore1 = score1;
-            }
+            if (score1 > highScore1) highScore1 = score1;
             repaint();
-            JOptionPane.showMessageDialog(this, "💀 Player 1 Kena peluru! Game Over.\nScore: " + score1 + "\nHigh Score: " + highScore1);
+            JOptionPane.showMessageDialog(this, "\uD83D\uDC80 Player 1 Kena peluru!\nScore: " + score1);
         }
-
-        // Check collision for player 2
         if (!player2Dead && arena[heartX2][heartY2] == '*') {
             player2Dead = true;
-            if (score2 > highScore2) {
-                highScore2 = score2;
-            }
+            if (score2 > highScore2) highScore2 = score2;
             repaint();
-            JOptionPane.showMessageDialog(this, "💀 Player 2 Kena peluru! Game Over.\nScore: " + score2 + "\nHigh Score: " + highScore2);
+            JOptionPane.showMessageDialog(this, "\uD83D\uDC80 Player 2 Kena peluru!\nScore: " + score2);
         }
 
-        // If both players are dead, reset the game
-        if (player1Dead && player2Dead) {
-            JOptionPane.showMessageDialog(this, "🎮 Both players are dead! Game Over.");
+        if ((isSinglePlayer && player1Dead) || (!isSinglePlayer && player1Dead && player2Dead)) {
+            JOptionPane.showMessageDialog(this, "\uD83C\uDFAE Game Over!");
             resetGame();
         }
 
-        // Update the arena positions based on player statuses
-        arena[heartX1][heartY1] = player1Dead ? ' ' : '♥'; // Player 1
-        arena[heartX2][heartY2] = player2Dead ? ' ' : '♦'; // Player 2
+        if (!player1Dead) arena[heartX1][heartY1] = '♥';
+        if (!player2Dead) arena[heartX2][heartY2] = '♦';
+
         repaint();
     }
 
     void resetGame() {
-        for (int i = 0; i < ROWS; i++) {
-            Arrays.fill(arena[i], ' ');
-        }
+        for (int i = 0; i < ROWS; i++) Arrays.fill(arena[i], ' ');
         heartX1 = ROWS - 2;
         heartY1 = COLS / 4;
         heartX2 = ROWS - 2;
         heartY2 = COLS - COLS / 4;
-        score1 = 0;
-        score2 = 0;
-        player1Dead = false;
-        player2Dead = false;
+        score1 = score2 = 0;
+        player1Dead = player2Dead = false;
+        skill1Ready = skill2Ready = true;
         timer.start();
     }
 
@@ -89,7 +111,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             for (int j = 0; j < COLS; j++) {
                 if (arena[i][j] == '*') {
                     if (arena[i + 1][j] == '♥' || arena[i + 1][j] == '♦') {
-                        arena[i + 1][j] = 'X';  // Bullet hit player
+                        arena[i + 1][j] = 'X';
                     } else {
                         arena[i + 1][j] = '*';
                     }
@@ -101,7 +123,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
 
     void spawnBullets() {
         for (int i = 0; i < COLS; i++) {
-            if (rand.nextInt(300) < 10) { // 10% chance to spawn bullet
+            if (rand.nextInt(300) < difficulty) {
                 arena[0][i] = '*';
             }
         }
@@ -110,85 +132,82 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
         setBackground(Color.black);
-
         int cellWidth = getWidth() / COLS;
         int cellHeight = getHeight() / ROWS;
         int fontSize = Math.min(cellWidth, cellHeight) - 2;
-
         g.setFont(new Font("Monospaced", Font.BOLD, fontSize));
 
-        // Draw the game arena
         for (int i = 0; i < ROWS; i++) {
             for (int j = 0; j < COLS; j++) {
                 char c = arena[i][j];
-                if (c == '♥') {
-                    g.setColor(Color.RED); // Player 1's Heart (red)
-                } else if (c == '♦') {
-                    g.setColor(Color.BLUE); // Player 2's Heart (blue)
-                } else if (c == '*') {
-                    g.setColor(Color.YELLOW); // Bullet (yellow)
-                } else if (c == 'X') {
-                    g.setColor(Color.ORANGE); // Collision mark (orange)
-                } else {
-                    g.setColor(Color.WHITE);
-                }
-                g.drawString(String.valueOf(c == '\0' ? ' ' : c),
-                        j * cellWidth + cellWidth / 4,
+                if (c == '♥') g.setColor(Color.RED);
+                else if (c == '♦') g.setColor(Color.BLUE);
+                else if (c == '*') g.setColor(Color.YELLOW);
+                else if (c == 'X') g.setColor(Color.ORANGE);
+                else g.setColor(Color.WHITE);
+
+                g.drawString(String.valueOf(c == '\0' ? ' ' : c), j * cellWidth + cellWidth / 4,
                         i * cellHeight + (3 * cellHeight / 4));
             }
         }
 
-        // Draw scores
         g.setColor(Color.GREEN);
         g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString("Player 1 Score: " + score1, 20, 30);
-        g.drawString("Player 2 Score: " + score2, 20, 60);
-        g.drawString("High Score P1: " + highScore1, 20, 90);
-        g.drawString("High Score P2: " + highScore2, 20, 120);
+        g.drawString("P1 Score: " + score1 + " | High: " + highScore1, 20, 30);
+        g.drawString("Skill: " + (skill1Ready ? "Ready" : "Cooldown"), 20, 60);
+        if (!isSinglePlayer) {
+            g.drawString("P2 Score: " + score2 + " | High: " + highScore2, 20, 90);
+            g.drawString("Skill: " + (skill2Ready ? "Ready" : "Cooldown"), 20, 120);
+        }
     }
 
     public void keyPressed(KeyEvent e) {
         int key = e.getKeyCode();
-        if (player1Dead && player2Dead) return; // Do nothing if both players are dead
+        long now = System.currentTimeMillis();
 
-        arena[heartX1][heartY1] = ' '; // clear previous position for player 1
-        arena[heartX2][heartY2] = ' '; // clear previous position for player 2
+        if (!player1Dead) arena[heartX1][heartY1] = ' ';
+        if (!player2Dead) arena[heartX2][heartY2] = ' ';
 
-        // Player 1 controls (WASD)
         if (!player1Dead) {
             switch (key) {
-                case KeyEvent.VK_W:
-                    if (heartX1 > 0) heartX1--;
-                    break;
-                case KeyEvent.VK_S:
-                    if (heartX1 < ROWS - 1) heartX1++;
-                    break;
-                case KeyEvent.VK_A:
-                    if (heartY1 > 0) heartY1--;
-                    break;
-                case KeyEvent.VK_D:
-                    if (heartY1 < COLS - 1) heartY1++;
+                case KeyEvent.VK_W: if (heartX1 > 0) heartX1--; break;
+                case KeyEvent.VK_S: if (heartX1 < ROWS - 1) heartX1++; break;
+                case KeyEvent.VK_A: if (heartY1 > 0) heartY1--; break;
+                case KeyEvent.VK_D: if (heartY1 < COLS - 1) heartY1++; break;
+                case KeyEvent.VK_E:
+                    if (skill1Ready) {
+                        timeStopped = true;
+                        timeStopStart = now;
+                        skill1Ready = false;
+                        skill1LastUsed = now;
+                    }
                     break;
             }
         }
 
-        // Player 2 controls (Arrow keys)
-        if (!player2Dead) {
+        if (!player2Dead && !isSinglePlayer) {
             switch (key) {
-                case KeyEvent.VK_UP:
-                    if (heartX2 > 0) heartX2--;
-                    break;
-                case KeyEvent.VK_DOWN:
-                    if (heartX2 < ROWS - 1) heartX2++;
-                    break;
-                case KeyEvent.VK_LEFT:
-                    if (heartY2 > 0) heartY2--;
-                    break;
-                case KeyEvent.VK_RIGHT:
-                    if (heartY2 < COLS - 1) heartY2++;
+                case KeyEvent.VK_UP: if (heartX2 > 0) heartX2--; break;
+                case KeyEvent.VK_DOWN: if (heartX2 < ROWS - 1) heartX2++; break;
+                case KeyEvent.VK_LEFT: if (heartY2 > 0) heartY2--; break;
+                case KeyEvent.VK_RIGHT: if (heartY2 < COLS - 1) heartY2++; break;
+                case KeyEvent.VK_END:
+                    if (skill2Ready) {
+                        for (int i = Math.max(0, heartX2 - 2); i <= Math.min(ROWS - 1, heartX2 + 2); i++) {
+                            for (int j = Math.max(0, heartY2 - 2); j <= Math.min(COLS - 1, heartY2 + 2); j++) {
+                                if (arena[i][j] == '*') arena[i][j] = ' ';
+                            }
+                        }
+                        skill2Ready = false;
+                        skill2LastUsed = now;
+                    }
                     break;
             }
         }
+
+        // Cooldown check
+        if (!skill1Ready && now - skill1LastUsed >= 15000) skill1Ready = true;
+        if (!skill2Ready && now - skill2LastUsed >= 5000) skill2Ready = true;
     }
 
     public void keyReleased(KeyEvent e) {}
@@ -198,7 +217,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
         JFrame frame = new JFrame("Undertale Mini Arena - Multiplayer");
         GameSimpleMultiplayer game = new GameSimpleMultiplayer();
         frame.add(game);
-        frame.setExtendedState(JFrame.MAXIMIZED_BOTH); // Fullscreen
+        frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
     }
