@@ -3,6 +3,11 @@ import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
 import javax.swing.Timer;
+import javax.sound.sampled.*;
+import java.io.File;
+import java.io.IOException;
+
+
 
 public class GameSimpleMultiplayer extends JPanel implements ActionListener, KeyListener {
     final int ROWS = 20, COLS = 60;
@@ -34,6 +39,18 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     // Default keys (static so bisa di-set sebelum buat objek)
     static int defaultTimeStopKey = KeyEvent.VK_E;
     static int defaultAreaClearKey = KeyEvent.VK_END;
+
+    private void playSound(String filePath) {
+        try {
+            File soundFile = new File(filePath);
+            AudioInputStream audioStream = AudioSystem.getAudioInputStream(soundFile);
+            Clip clip = AudioSystem.getClip();
+            clip.open(audioStream);
+            clip.start();
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            e.printStackTrace();
+        }
+    }
 
     // Constructors
     public GameSimpleMultiplayer(boolean singlePlayer) {
@@ -200,6 +217,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 timeStopActive = true;
                 timeStopStart = System.currentTimeMillis();
                 timeStopCooldownStart = timeStopStart;
+                playSound("E:/Game/game-simple/sounds/player1.wav"); // Mainkan sound effect untuk Player 1
             }
         }
     
@@ -214,6 +232,7 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
                 areaClearActive = true;
                 areaClearStart = System.currentTimeMillis();
                 areaClearCooldownStart = areaClearStart;
+                playSound("E:/Game/game-simple/sounds/player2.wav"); // Mainkan sound effect untuk Player 2
             }
         }
     }
