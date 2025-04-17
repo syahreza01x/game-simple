@@ -1,13 +1,12 @@
+// (sama seperti bagian import kamu)
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
-import javax.swing.Timer;
 import javax.sound.sampled.*;
 import java.io.File;
 import java.io.IOException;
-
-
+import javax.swing.Timer;
 
 public class GameSimpleMultiplayer extends JPanel implements ActionListener, KeyListener {
     final int ROWS = 20, COLS = 60;
@@ -36,13 +35,16 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     int timeStopKey;
     int areaClearKey;
 
-    // Default keys (static so bisa di-set sebelum buat objek)
     static int defaultTimeStopKey = KeyEvent.VK_E;
     static int defaultAreaClearKey = KeyEvent.VK_END;
 
-    private void playSound(String filePath) {
+    private void playSound(String relativePath) {
         try {
-            File soundFile = new File(filePath);
+            File soundFile = new File(relativePath);
+            if (!soundFile.exists()) {
+                System.out.println("File tidak ditemukan: " + relativePath);
+                return;
+            }
             AudioInputStream audioStream = AudioSystem.getAudioInputStream(soundFile);
             Clip clip = AudioSystem.getClip();
             clip.open(audioStream);
@@ -52,7 +54,6 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
         }
     }
 
-    // Constructors
     public GameSimpleMultiplayer(boolean singlePlayer) {
         this(singlePlayer, defaultTimeStopKey, defaultAreaClearKey);
     }
@@ -69,61 +70,54 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
 
     public void actionPerformed(ActionEvent e) {
         long now = System.currentTimeMillis();
-    
-        // Jika timeStop aktif, hanya Player 2 yang tidak bisa bergerak dan skornya berhenti
-        if (timeStopActive && (now - timeStopStart < 5000)) {
-            if (!player1Dead) score1++; // Player 1 tetap mendapatkan skor
+        boolean timeStopWindow = timeStopActive && (now - timeStopStart < 5000);
+
+        // Score logic
+        if (!player1Dead) score1++;
+        if (!player2Dead && !isSinglePlayer && !timeStopWindow) score2++;
+
+        if (timeStopWindow) {
+            // Player 2 frozen, no bullets update
         } else {
-            timeStopActive = false; // Jika waktu skill sudah habis, lanjutkan aksi
+            timeStopActive = false;
             updateBullets();
             spawnBullets();
         }
-    
-        // Skor hanya diperbarui untuk Player 2 jika mereka tidak mati dan timeStop tidak aktif
-        if (!player2Dead && !isSinglePlayer && !timeStopActive) score2++;
-    
-        // Pemeriksaan kematian Player 1 dan Player 2
+
+        // Check deaths
         if (!player1Dead && arena[heartX1][heartY1] == '*') {
             player1Dead = true;
             if (score1 > highScore1) highScore1 = score1;
             repaint();
             JOptionPane.showMessageDialog(this, "💀 Player 1 Kena peluru! Game Over.\nScore: " + score1 + "\nHigh Score: " + highScore1);
         }
-    
+
         if (!player2Dead && !isSinglePlayer && arena[heartX2][heartY2] == '*') {
             player2Dead = true;
             if (score2 > highScore2) highScore2 = score2;
             repaint();
             JOptionPane.showMessageDialog(this, "💀 Player 2 Kena peluru! Game Over.\nScore: " + score2 + "\nHigh Score: " + highScore2);
         }
-    
-        // Game Over jika kedua player mati
-        if ((player1Dead && (player2Dead && isSinglePlayer))) {
-            JOptionPane.showMessageDialog(this, "🎮 Game Over. Player mati.");
-            resetGame();
-        }
-    
+
+        // Game over
         if ((player1Dead && (player2Dead || isSinglePlayer))) {
             JOptionPane.showMessageDialog(this, "🎮 Game Over. Player mati.");
             resetGame();
         }
-    
-        // Perbarui posisi pemain
+
+        // Update arena
         if (!player1Dead) arena[heartX1][heartY1] = '♥'; else arena[heartX1][heartY1] = ' ';
         if (!player2Dead && !isSinglePlayer) arena[heartX2][heartY2] = '♦'; else arena[heartX2][heartY2] = ' ';
-    
-        // Cek areaClear jika aktif
+
+        // Skill area clear
         if (areaClearActive && (now - areaClearStart <= 5000)) {
             clearBulletsAroundPlayer2();
         } else {
             areaClearActive = false;
         }
-    
+
         repaint();
     }
-    
-    
-    
 
     void resetGame() {
         for (int i = 0; i < ROWS; i++) Arrays.fill(arena[i], ' ');
@@ -133,7 +127,6 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
         player1Dead = false; player2Dead = false;
         timeStopActive = false; areaClearActive = false;
         timeStopCooldownStart = -15000; areaClearCooldownStart = -5000;
-        timer.start();
     }
 
     void updateBullets() {
@@ -202,43 +195,40 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
     public void keyPressed(KeyEvent e) {
         int key = e.getKeyCode();
         if (player1Dead && (player2Dead || isSinglePlayer)) return;
-    
+
         arena[heartX1][heartY1] = ' ';
         arena[heartX2][heartY2] = ' ';
-    
+
         if (!player1Dead) {
             switch (key) {
-                case KeyEvent.VK_W: if (heartX1 > 0) heartX1--; break;
-                case KeyEvent.VK_S: if (heartX1 < ROWS - 1) heartX1++; break;
-                case KeyEvent.VK_A: if (heartY1 > 0) heartY1--; break;
-                case KeyEvent.VK_D: if (heartY1 < COLS - 1) heartY1++; break;
+                case KeyEvent.VK_W -> { if (heartX1 > 0) heartX1--; }
+                case KeyEvent.VK_S -> { if (heartX1 < ROWS - 1) heartX1++; }
+                case KeyEvent.VK_A -> { if (heartY1 > 0) heartY1--; }
+                case KeyEvent.VK_D -> { if (heartY1 < COLS - 1) heartY1++; }
             }
             if (key == timeStopKey && System.currentTimeMillis() - timeStopCooldownStart >= 15000) {
                 timeStopActive = true;
                 timeStopStart = System.currentTimeMillis();
                 timeStopCooldownStart = timeStopStart;
-                playSound("E:/Game/game-simple/sounds/player1.wav"); // Mainkan sound effect untuk Player 1
+                playSound("sounds/player1.wav");
             }
         }
-    
-        if (!player2Dead && !isSinglePlayer && !timeStopActive) { // Pastikan Player 2 tidak bergerak saat timeStop aktif
+
+        if (!player2Dead && !isSinglePlayer && !timeStopActive) {
             switch (key) {
-                case KeyEvent.VK_UP: if (heartX2 > 0) heartX2--; break;
-                case KeyEvent.VK_DOWN: if (heartX2 < ROWS - 1) heartX2++; break;
-                case KeyEvent.VK_LEFT: if (heartY2 > 0) heartY2--; break;
-                case KeyEvent.VK_RIGHT: if (heartY2 < COLS - 1) heartY2++; break;
+                case KeyEvent.VK_UP -> { if (heartX2 > 0) heartX2--; }
+                case KeyEvent.VK_DOWN -> { if (heartX2 < ROWS - 1) heartX2++; }
+                case KeyEvent.VK_LEFT -> { if (heartY2 > 0) heartY2--; }
+                case KeyEvent.VK_RIGHT -> { if (heartY2 < COLS - 1) heartY2++; }
             }
             if (key == areaClearKey && System.currentTimeMillis() - areaClearCooldownStart >= 5000) {
                 areaClearActive = true;
                 areaClearStart = System.currentTimeMillis();
                 areaClearCooldownStart = areaClearStart;
-                playSound("E:/Game/game-simple/sounds/player2.wav"); // Mainkan sound effect untuk Player 2
+                playSound("sounds/player2.wav");
             }
         }
     }
-    
-    
-    
 
     public void keyReleased(KeyEvent e) {}
     public void keyTyped(KeyEvent e) {}
@@ -247,17 +237,17 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
         String[] difficulties = {"Easy", "Normal", "Hard"};
         int difficultyChoice = JOptionPane.showOptionDialog(null, "Pilih Difficulty:", "Difficulty",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, difficulties, difficulties[0]);
-    
+
         int delay = switch (difficultyChoice) {
-            case 0 -> 1000 / 5;   // Easy = lambat
-            case 2 -> 1000 / 15;  // Hard = cepat
-            default -> 1000 / 10; // Normal
+            case 0 -> 1000 / 5;
+            case 2 -> 1000 / 15;
+            default -> 1000 / 10;
         };
-    
+
         String[] options = {"Single Player", "Multiplayer", "Settings"};
         int choice = JOptionPane.showOptionDialog(null, "Pilih Mode:", "Mode Game",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
-    
+
         if (choice == 2) {
             String input1 = JOptionPane.showInputDialog("Tombol skill Player 1 (E.g., E, Q, R):");
             String input2 = JOptionPane.showInputDialog("Tombol skill Player 2 (E.g., END, L, O):");
@@ -270,14 +260,13 @@ public class GameSimpleMultiplayer extends JPanel implements ActionListener, Key
             main(null); // restart
             return;
         }
-    
+
         JFrame frame = new JFrame("ReZy Retro Game");
         GameSimpleMultiplayer game = new GameSimpleMultiplayer(choice == 0, defaultTimeStopKey, defaultAreaClearKey);
-        game.timer.setDelay(delay); // apply difficulty
+        game.timer.setDelay(delay);
         frame.add(game);
         frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
     }
 }
-
